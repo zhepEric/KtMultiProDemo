@@ -6,7 +6,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import kotlinx.coroutines.delay
+import com.example.ktmultiprodemo.data.FeedRepository
 import kotlinx.coroutines.launch
 
 data class FeedItem(
@@ -16,27 +16,24 @@ data class FeedItem(
     val liked: Boolean = false,
 )
 
-/** 假数据源，模拟网络返回的 20 条数据 */
-private val fakeFeeds = (1..20).map {
-    FeedItem(id = it, title = "Kotlin 多平台实战 #$it", author = "作者 ${it % 5}")
-}
-
 /**
- * ===== 练习点：状态提升（State Hoisting）到 ViewModel =====
+ * ===== 状态提升 + 依赖注入 =====
  *
- * 问题复盘：之前点赞状态放在 RecommendScreen 的 remember 里，
- * remember 只在"组合存在期间"存活。切换 Tab 时 NavHost 会销毁
- * 推荐页组合，remember 状态随之销毁，切回来等于从零开始。
+ * 状态在 ViewModel 里：生命周期跟随 ViewModelStoreOwner（见 App.kt），
+ * 切换 Tab 页面销毁重组不影响它，点赞、搜索词、加载状态都保留。
  *
- * 解决：把状态放进 ViewModel。ViewModel 的生命周期跟随
- * ViewModelStoreOwner（这里是 Activity 级，见 App.kt），
- * 页面销毁重组不影响它，所以点赞、搜索词、加载状态都保留。
+ * 依赖由 Koin 注入：ViewModel 只声明"我要一个 FeedRepository"，
+ * 不关心它怎么 new 出来的（见 di/AppModule.kt）。以后把假数据
+ * 换成网络实现时，这里一行都不用改。
  *
  * 分工约定：
- * - ViewModel：业务状态 + 业务逻辑（加载、点赞），不知道 Composable 的存在
- * - Screen：纯 UI，读 ViewModel 的状态，把用户事件回调给 ViewModel
+ * - Repository：数据从哪来（假数据/网络/数据库）
+ * - ViewModel：业务状态 + 业务逻辑（加载、点赞）
+ * - Screen：纯 UI，读状态、抛事件
  */
-class RecommendViewModel : ViewModel() {
+class RecommendViewModel(
+    private val repository: FeedRepository,
+) : ViewModel() {
 
     /** 加载状态：只在 ViewModel 创建时加载一次，切 Tab 不会重新触发 */
     var loading by mutableStateOf(true)
@@ -49,10 +46,9 @@ class RecommendViewModel : ViewModel() {
     val feeds = mutableStateListOf<FeedItem>()
 
     init {
-        // 模拟首次请求接口：init 只在 ViewModel 首次创建时执行一次
+        // init 只在 ViewModel 首次创建时执行一次
         viewModelScope.launch {
-            delay(1500)
-            feeds.addAll(fakeFeeds)
+            feeds.addAll(repository.fetchFeeds())
             loading = false
         }
     }
@@ -65,3 +61,4 @@ class RecommendViewModel : ViewModel() {
         }
     }
 }
+

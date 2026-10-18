@@ -19,18 +19,20 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
-import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import com.example.ktmultiprodemo.di.appModule
 import com.example.ktmultiprodemo.navigation.TabItem
 import com.example.ktmultiprodemo.ui.EffectsScreen
 import com.example.ktmultiprodemo.ui.ProfileScreen
 import com.example.ktmultiprodemo.ui.RecommendScreen
 import com.example.ktmultiprodemo.ui.RecommendViewModel
 import org.jetbrains.compose.resources.painterResource
+import org.koin.compose.KoinApplication
+import org.koin.compose.viewmodel.koinViewModel
 
 import ktmultiprodemo.shared.generated.resources.Res
 import ktmultiprodemo.shared.generated.resources.compose_multiplatform
@@ -38,15 +40,26 @@ import ktmultiprodemo.shared.generated.resources.compose_multiplatform
 @Composable
 @Preview
 fun App() {
+    // KoinApplication：Compose 版的 Koin 启动方式（CMP 官方推荐），
+    // 替代各平台分别 startKoin，一套代码全平台生效
+    KoinApplication(application = {
+        modules(appModule)
+    }) {
+        AppContent()
+    }
+}
+
+@Composable
+private fun AppContent() {
     val navController = rememberNavController()
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute by remember {
         derivedStateOf { backStackEntry?.destination?.route }
     }
 
-    // ViewModel 挂到 App 级 ViewModelStoreOwner（Activity 级），
-    // 生命周期覆盖整个页面切换过程，页面销毁重组不影响其中的状态
-    val recommendViewModel: RecommendViewModel = viewModel { RecommendViewModel() }
+    // koinViewModel()：由 Koin 按 AppModule 里的声明创建并注入 FeedRepository；
+    // 仍挂在 App 级 ViewModelStoreOwner（Activity 级），切 Tab 状态不丢
+    val recommendViewModel: RecommendViewModel = koinViewModel()
 
     MaterialTheme {
 //        var showContent by remember { mutableStateOf(false) }

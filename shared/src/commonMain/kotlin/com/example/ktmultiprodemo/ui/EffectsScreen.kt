@@ -28,6 +28,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.random.Random
@@ -56,6 +58,7 @@ fun EffectsScreen() {
         DisposableEffectDemo()
         ProduceStateDemo()
         RememberCoroutineScopeDemo()
+        LifecycleVsDisposableDemo()
     }
 }
 
@@ -103,8 +106,16 @@ fun LaunchedEffectDemo() {
 /** 假想的埋点 SDK：典型场景——注册后必须反注册，否则泄漏 */
 private object FakeTracker {
     val logs = mutableStateListOf<String>()
-    fun start(name: String) = logs.add(0, "📍 onStart: $name")
-    fun stop(name: String) = logs.add(0, "🛑 onStop: $name")
+    // 同时打到控制台：Android 上 Logcat 过滤 package:mine 或搜索 "EffectLab" 可见
+    //（println 在 Logcat 里的 tag 是 System.out，所以按 tag:Disposable 过滤是搜不到的）
+    fun start(name: String) {
+        logs.add(0, "📍 onStart: $name")
+        println("EffectLab onStart: $name")
+    }
+    fun stop(name: String) {
+        logs.add(0, "🛑 onStop: $name")
+        println("EffectLab onStop: $name")
+    }
 }
 
 @Composable
@@ -191,6 +202,69 @@ fun RememberCoroutineScopeDemo() {
                 message = "✅ 3 秒到了，回调完成"
             }
         }) { Text("启动 3 秒任务") }
+    }
+}
+
+// =====================================================================
+// 实验 5：DisposableEffect vs LifecycleEventEffect —— 组合生命周期 vs 应用生命周期
+// =====================================================================
+
+/** 本实验专用日志（带序号，方便对比触发顺序；同步输出到控制台/Logcat） */
+private object EffectCompareLogger {
+    val logs = mutableStateListOf<String>()
+    private var seq = 0
+    fun log(tag: String, event: String) {
+        seq++
+        val line = "#$seq  [$tag] $event"
+        logs.add(0, line)
+        println("EffectLab $line") // Logcat 过滤 package:mine 或搜索 "EffectLab"
+    }
+    fun clear() = logs.clear()
+}
+
+@Composable
+fun LifecycleVsDisposableDemo() {
+    var cardVisible by remember { mutableStateOf(true) }
+
+    // B. LifecycleEventEffect：锚定【LocalLifecycleOwner 的生命周期】
+    // 注意作用域：这里处在 NavHost 页面里，LocalLifecycleOwner 是该页面的
+    // NavBackStackEntry（Navigation 给每个页面配了独立生命周期），
+    // 所以它不仅响应 App 前后台，切 Tab 被覆盖时同样会收到 ON_STOP。
+    // 首次进入页面看不到 🟢：ON_START 在页面显示之前早已发生，只响应之后的新事件。
+    LifecycleEventEffect(Lifecycle.Event.ON_START) {
+        EffectCompareLogger.log("Lifecycle", "🟢 ON_START（可见/回前台）")
+    }
+    LifecycleEventEffect(Lifecycle.Event.ON_STOP) {
+        EffectCompareLogger.log("Lifecycle", "🔴 ON_STOP（不可见/退后台）")
+    }
+
+    DemoCard(title = "5️⃣ DisposableEffect vs Lifecycle 事件") {
+        TextButton(onClick = { cardVisible = !cardVisible }) {
+            Text(if (cardVisible) "隐藏子卡片（纯组合变化）" else "显示子卡片")
+        }
+
+        if (cardVisible) {
+            // A. DisposableEffect：锚定【组合】——Composable 在不在组合树里。
+            // 放在 if 里：点按钮即可制造"纯组合变化"，与生命周期事件完全隔离
+            DisposableEffect(Unit) {
+                EffectCompareLogger.log("Disposable", "▶️ 进入组合（注册）")
+                onDispose { EffectCompareLogger.log("Disposable", "⏹️ 离开组合（解注册）") }
+            }
+            Text("子卡片可见中 ✅")
+        }
+
+        Text(
+            "操作 A：点上方按钮隐藏子卡片 → 只有 ⏹️（组合变了，生命周期无感）\n" +
+                "操作 B：按 Home 键退后台再回来 → 只有 🔴🟢（组合没销毁）\n" +
+                "操作 C：切 Tab 再切回 → ⏹️▶️ 和 🔴🟢 都会出现：页面出了组合，" +
+                "且 Navigation 的页面级生命周期也会 STOP→START\n" +
+                "结论：组合生命周期与 Lifecycle 事件是两套维度，按场景选用",
+            style = MaterialTheme.typography.bodySmall
+        )
+        TextButton(onClick = { EffectCompareLogger.clear() }) { Text("清空日志") }
+        EffectCompareLogger.logs.take(10).forEach { log ->
+            Text(log, style = MaterialTheme.typography.bodySmall)
+        }
     }
 }
 
