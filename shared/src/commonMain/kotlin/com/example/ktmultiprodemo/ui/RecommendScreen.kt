@@ -33,6 +33,7 @@ import androidx.compose.ui.unit.dp
 @Composable
 fun RecommendScreen(viewModel: RecommendViewModel) {
     val loading = viewModel.loading
+    val error = viewModel.error
     val query = viewModel.query
     val feeds = viewModel.feeds
 
@@ -56,18 +57,31 @@ fun RecommendScreen(viewModel: RecommendViewModel) {
 
         Spacer(Modifier.height(16.dp))
 
-        if (loading) {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator()
+        when {
+            loading -> {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator()
+                }
             }
-        } else {
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                items(items = filtered, key = { it.id }) { feed ->
-                    FeedCard(
-                        feed,
-                        onLike = viewModel::toggleLike,
-                        modifier = Modifier.animateItem()
-                    )
+            error != null -> {
+                // 真实网络请求必须有错误兜底：提示 + 重试
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(error, color = MaterialTheme.colorScheme.error)
+                        Spacer(Modifier.height(8.dp))
+                        TextButton(onClick = viewModel::loadFeeds) { Text("重试") }
+                    }
+                }
+            }
+            else -> {
+                LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    items(items = filtered, key = { it.id }) { feed ->
+                        FeedCard(
+                            feed,
+                            onLike = viewModel::toggleLike,
+                            modifier = Modifier.animateItem()
+                        )
+                    }
                 }
             }
         }

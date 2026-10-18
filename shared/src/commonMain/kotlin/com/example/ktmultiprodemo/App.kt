@@ -25,6 +25,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.example.ktmultiprodemo.di.appModule
+import com.example.ktmultiprodemo.di.networkModule
 import com.example.ktmultiprodemo.navigation.TabItem
 import com.example.ktmultiprodemo.ui.EffectsScreen
 import com.example.ktmultiprodemo.ui.ProfileScreen
@@ -41,9 +42,10 @@ import ktmultiprodemo.shared.generated.resources.compose_multiplatform
 @Preview
 fun App() {
     // KoinApplication：Compose 版的 Koin 启动方式（CMP 官方推荐），
-    // 替代各平台分别 startKoin，一套代码全平台生效
+    // 替代各平台分别 startKoin，一套代码全平台生效；
+    // 多个 module 一起装载，依赖跨 module 解析（见 di/AppModule.kt）
     KoinApplication(application = {
-        modules(appModule)
+        modules(appModule, networkModule)
     }) {
         AppContent()
     }

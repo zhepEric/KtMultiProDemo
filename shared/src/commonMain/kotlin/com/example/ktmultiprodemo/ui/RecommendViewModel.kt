@@ -35,8 +35,12 @@ class RecommendViewModel(
     private val repository: FeedRepository,
 ) : ViewModel() {
 
-    /** 加载状态：只在 ViewModel 创建时加载一次，切 Tab 不会重新触发 */
+    /** 加载状态 */
     var loading by mutableStateOf(true)
+        private set
+
+    /** 网络错误信息：null 表示正常；真实网络请求必须有错误态 */
+    var error by mutableStateOf<String?>(null)
         private set
 
     /** 搜索词：替代原来的 rememberSaveable，生命周期比页面更长 */
@@ -46,10 +50,24 @@ class RecommendViewModel(
     val feeds = mutableStateListOf<FeedItem>()
 
     init {
-        // init 只在 ViewModel 首次创建时执行一次
+        loadFeeds()
+    }
+
+    /** 拉取数据：首次进入和点"重试"都会走这里 */
+    fun loadFeeds() {
         viewModelScope.launch {
-            feeds.addAll(repository.fetchFeeds())
-            loading = false
+            loading = true
+            error = null
+            try {
+                val result = repository.fetchFeeds()
+                feeds.clear()
+                feeds.addAll(result)
+            } catch (e: Exception) {
+                // 真实网络场景：超时、无网、JSON 解析失败都会到这里
+                error = "加载失败：${e.message ?: e::class.simpleName}"
+            } finally {
+                loading = false
+            }
         }
     }
 
